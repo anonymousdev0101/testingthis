@@ -2,6 +2,7 @@ import os
 import platform
 import psutil
 import socket
+import time
 import streamlit as st
 
 def get_system_info():
@@ -36,16 +37,19 @@ def get_system_info():
     # Disk Partitions
     partitions = psutil.disk_partitions()
     partition_info = []
+    seen_devices = set()  # To avoid showing the same disk partition multiple times
     for partition in partitions:
-        partition_info.append({
-            'Device': partition.device,
-            'Mount Point': partition.mountpoint,
-            'Filesystem Type': partition.fstype,
-            'Total': convert_bytes(psutil.disk_usage(partition.mountpoint).total),
-            'Used': convert_bytes(psutil.disk_usage(partition.mountpoint).used),
-            'Free': convert_bytes(psutil.disk_usage(partition.mountpoint).free),
-            'Usage': psutil.disk_usage(partition.mountpoint).percent
-        })
+        if partition.device not in seen_devices:
+            partition_info.append({
+                'Device': partition.device,
+                'Mount Point': partition.mountpoint,
+                'Filesystem Type': partition.fstype,
+                'Total': convert_bytes(psutil.disk_usage(partition.mountpoint).total),
+                'Used': convert_bytes(psutil.disk_usage(partition.mountpoint).used),
+                'Free': convert_bytes(psutil.disk_usage(partition.mountpoint).free),
+                'Usage': psutil.disk_usage(partition.mountpoint).percent
+            })
+            seen_devices.add(partition.device)
     info['Disk Partitions'] = partition_info
 
     # Network Info
@@ -70,7 +74,8 @@ def get_system_info():
     info['Network Interfaces'] = network_interfaces
 
     # Uptime
-    info['Uptime'] = str(psutil.boot_time())
+    uptime_seconds = time.time() - psutil.boot_time()  # Get uptime in seconds
+    info['Uptime'] = convert_uptime(uptime_seconds)
 
     # Load Average (system load over the last 1, 5, and 15 minutes)
     load = psutil.getloadavg()
@@ -137,6 +142,13 @@ def convert_bytes(bytes_size):
             return f"{bytes_size:.2f} {unit}"
         bytes_size /= 1024
 
+def convert_uptime(seconds):
+    """ Convert uptime in seconds to a human-readable format (days, hours, minutes) """
+    days = seconds // (24 * 3600)
+    hours = (seconds % (24 * 3600)) // 3600
+    minutes = (seconds % 3600) // 60
+    return f"{int(days)} days, {int(hours)} hours, {int(minutes)} minutes"
+
 def display_device_info(info):
     """ Display the system/device info using Streamlit widgets """
     st.title("System Information")
@@ -180,6 +192,7 @@ def display_device_info(info):
     st.write(f"**Hostname:** {info['Hostname']}")
     st.write(f"**IP Address:** {info['IP Address']}")
     
+    # Displaying Network Interfaces
     st.subheader("Network Interfaces")
     for iface in info['Network Interfaces']:
         st.write(f"**{iface['Interface']}** - IP: {iface['Address']}, Netmask: {iface['Netmask']}, "
@@ -191,24 +204,23 @@ def display_device_info(info):
 
     # Displaying Load Average
     st.subheader("System Load Average")
-    st.write(f"**1 Minute Load Average:** {info['Load Average']['1 Minute']}")
-    st.write(f"**5 Minute Load Average:** {info['Load Average']['5 Minutes']}")
-    st.write(f"**15 Minute Load Average:** {info['Load Average']['15 Minutes']}")
-
-    # Displaying GPU Info
-    if 'GPU Info' in info:
-        st.subheader("GPU Info")
-        for gpu in info['GPU Info']:
-            st.write(f"**{gpu}**")
+    for time_period, load in info['Load Average'].items():
+        st.write(f"**{time_period}:** {load}")
 
     # Displaying Battery Info
     if 'Battery Percentage' in info:
-        st.subheader("Battery Info")
+        st.subheader("Battery Information")
         st.write(f"**Battery Percentage:** {info['Battery Percentage']}%")
         st.write(f"**Battery Plugged:** {'Yes' if info['Battery Plugged'] else 'No'}")
-        st.write(f"**Battery Time Left:** {info['Battery Time Left']} minutes" if isinstance(info['Battery Time Left'], int) else info['Battery Time Left'])
+        st.write(f"**Battery Time Left:** {info['Battery Time Left']} minutes")
+
+    # Displaying GPU Info
+    if 'GPU Info' in info and info['GPU Info']:
+        st.subheader("GPU Info")
+        for gpu in info['GPU Info']:
+            st.write(f"**GPU:** {gpu}")
     else:
-        st.write(info.get('Battery Info', 'No battery information available.'))
+        st.write("No GPU information available.")
 
     # Displaying CPU Temperature
     if 'CPU Temperature' in info:
