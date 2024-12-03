@@ -40,11 +40,14 @@ def get_system_info():
     info['IP Address'] = ip_address
 
     # Battery Info (if available)
-    if psutil.sensors_battery():
-        battery = psutil.sensors_battery()
-        info['Battery Percentage'] = battery.percent
-        info['Battery Plugged'] = battery.power_plugged
-        info['Battery Time Left'] = battery.secsleft // 60 if battery.secsleft != psutil.POWER_TIME_UNLIMITED else "Unlimited"
+    try:
+        if psutil.sensors_battery():
+            battery = psutil.sensors_battery()
+            info['Battery Percentage'] = battery.percent
+            info['Battery Plugged'] = battery.power_plugged
+            info['Battery Time Left'] = battery.secsleft // 60 if battery.secsleft != psutil.POWER_TIME_UNLIMITED else "Unlimited"
+    except (FileNotFoundError, AttributeError):
+        info['Battery Info'] = "Battery information not available (likely a desktop or VM)."
 
     return info
 
@@ -98,6 +101,8 @@ def display_device_info(info):
         st.write(f"**Battery Percentage:** {info['Battery Percentage']}%")
         st.write(f"**Battery Plugged:** {'Yes' if info['Battery Plugged'] else 'No'}")
         st.write(f"**Battery Time Left:** {info['Battery Time Left']} minutes" if isinstance(info['Battery Time Left'], int) else info['Battery Time Left'])
+    else:
+        st.write(info.get('Battery Info', 'No battery information available.'))
 
 if __name__ == '__main__':
     system_info = get_system_info()
